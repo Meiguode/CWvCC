@@ -1,8 +1,8 @@
-# --- Load libraries ---
+#Code for generating cluster similarity heatmap
+
 library(igraph)
 library(pheatmap)
 
-# --- Step 1: Read vertices ---
 vertex_lines <- readLines("Vertices-only.TXT")
 vertex_lines <- vertex_lines[vertex_lines != ""]
 vertex_lines <- vertex_lines[-1]  # remove header
@@ -31,7 +31,6 @@ if(any(duplicated(vertices$name))){
   vertices$name <- paste0(vertices$name, "_", vertices$id)
 }
 
-# --- Step 2: Read edges ---
 edge_lines <- readLines("Edges-only.TXT")
 edge_lines <- edge_lines[edge_lines != ""]
 edge_lines <- edge_lines[-1]  # remove header
@@ -47,26 +46,21 @@ for(line in edge_lines){
                             stringsAsFactors=FALSE))
 }
 
-# --- Step 3: Map edges to vertex names ---
 edges$from_name <- vertices$name[match(edges$from, vertices$id)]
 edges$to_name   <- vertices$name[match(edges$to, vertices$id)]
 
-# --- Step 4: Create igraph ---
 g <- graph_from_data_frame(d = data.frame(from=edges$from_name,
                                           to=edges$to_name,
                                           weight=edges$weight),
                            vertices = vertices[, c("name","x","y")],
                            directed = FALSE)
 
-# --- Step 5: Louvain clustering ---
 cl <- cluster_louvain(g, weights = E(g)$weight)
 V(g)$cluster <- membership(cl)
 
-# --- Step 6: Compute cluster sizes and select top 5 ---
 cluster_sizes <- sort(table(V(g)$cluster), decreasing = TRUE)
 top5_clusters <- as.numeric(names(cluster_sizes)[1:5])
 
-# --- Step 7: Build cluster similarity matrix ---
 edges$cluster_from <- V(g)$cluster[match(edges$from_name, V(g)$name)]
 edges$cluster_to   <- V(g)$cluster[match(edges$to_name, V(g)$name)]
 
@@ -86,22 +80,17 @@ for(i in 1:nrow(cluster_sims)){
   sim_matrix[ct, cf] <- val
 }
 
-# --- Step 8: Subset top 5 clusters safely ---
 top5_char <- as.character(top5_clusters)
 sim_matrix_top5 <- sim_matrix[top5_char, top5_char, drop=FALSE]
 
-# --- Step 9: Label clusters C1-C5 ---
 cluster_labels <- paste0("C", 1:5)
 rownames(sim_matrix_top5) <- cluster_labels
 colnames(sim_matrix_top5) <- cluster_labels
 
-# --- Step 10: Define glow-like monochrome palette ---
 glow_palette <- colorRampPalette(c("#fefefe", "#7a7a7a"))(100)
 
-# Exponential scaling for subtle glow effect
 sim_matrix_scaled <- (sim_matrix_top5 / max(sim_matrix_top5))^1.5 * max(sim_matrix_top5)
 
-# --- Step 11: Save heatmap as TIFF with larger numbers and labels ---
 tiff(filename="Top5_Cluster_Similarity_Heatmap.tiff", width=1800, height=1600, res=200)
 pheatmap(sim_matrix_scaled,
          cluster_rows = FALSE,
@@ -116,3 +105,4 @@ pheatmap(sim_matrix_scaled,
          fontsize_col = 16,      # Larger column labels (C1-C5)
          legend = FALSE)
 dev.off()
+
